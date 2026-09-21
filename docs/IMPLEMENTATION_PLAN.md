@@ -10,7 +10,7 @@
    - Responsive mobile-first stylesheet with modern aesthetics.
    - Beveled frame container reflecting the physical Seeed reTerminal E1001 device.
 4. **App Shell & Walkthrough (`index.html`)**:
-   - Header with Gravatar profile and ChronoOwl mascot.
+   - Header with Gravatar profile and brand icon.
    - Interactive onboarding walkthrough modal.
    - Governance footer.
 5. **Testing & Verification**:

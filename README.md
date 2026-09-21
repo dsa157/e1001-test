@@ -15,6 +15,5 @@ A responsive screen renderer, web dashboard, and native embedded firmware optimi
 - **Minute-Boundary Sync**: Ticks and updates automatically at exact 60-second intervals.
 - **5 Adobe Kuler Palettes**: Curated palettes for e-ink contrast or color preview.
 - **E-Paper Simulation**: 1-bit monochrome and 4-level grayscale dithering filters.
-- **Mascot**: ChronoOwl ("Inky"), the vigilant e-paper timekeeper.
 - **Zero Dependencies**: Lightweight pure HTML5/CSS3/Vanilla JavaScript.
 - **Native Firmware**: Embedded ESP32-S3 driver supporting Seeed_GxEPD2 and ESPHome.

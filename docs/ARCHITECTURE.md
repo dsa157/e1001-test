@@ -26,7 +26,7 @@ The application is structured as a client-rendered HTML5 Canvas & SVG e-paper sc
 - **Renderer (`app.js`)**: Encapsulates dial trigonometry, hour/minute hand rendering, date ribbon, and e-paper pixel dithering/quantization.
 - **Timer Subsystem**: Synchronizes to the system clock so updates fire at `SS:00` without drift.
 - **Color Engine**: Stores 5 distinct Adobe Kuler palettes with selectable indices and e-ink contrast simulation.
-- **UI & Layout (`index.html`, `style.css`)**: Responsive layout with header navigation, Gravatar profile icon, mascot banner, canvas container, and governance footer.
+- **UI & Layout (`index.html`, `style.css`)**: Responsive layout with header navigation, Gravatar profile icon, canvas container, and governance footer.
 
 ## 3. Technology Stack
 - **HTML5 Canvas & Semantic HTML**
