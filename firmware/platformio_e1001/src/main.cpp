@@ -170,18 +170,20 @@ void drawClockPage(int hour, int minute, int day, int month) {
 }
 
 #ifndef BUILD_EPOCH
-#define BUILD_EPOCH 1789989600L // Fallback timestamp: Sep 21 2026
+#define BUILD_EPOCH 1789990300L
 #endif
 
 // Persist timestamp across ESP32 deep sleep cycles
 RTC_DATA_ATTR static time_t rtc_epoch = 0;
+RTC_DATA_ATTR static uint32_t last_sleep_sec = 0;
 
 void setup() {
+  uint32_t start_ms = millis();
   Serial.begin(115200);
-  delay(300);
+  delay(200);
   Serial.println("=========================================");
-  Serial.println("Seeed reTerminal E1001 GxEPD2 Clock Init");
-  Serial.println("Version: 2026.09.21.18.20.00");
+  Serial.println("Seeed reTerminal E1001 Minute-Sync Clock");
+  Serial.println("Version: 2026.09.21.18.31.00");
   Serial.println("=========================================");
 
   // 1. Release SD Card from SPI bus so it does not interfere with E-Paper
@@ -200,8 +202,8 @@ void setup() {
   // 4. Real RTC Timekeeping across deep sleep
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER && rtc_epoch > 0) {
-    // Advance timestamp by the sleep duration (60 seconds)
-    rtc_epoch += 60;
+    // Advance timestamp by the actual sleep + processing duration
+    rtc_epoch += (last_sleep_sec > 0 ? last_sleep_sec : 60);
   } else {
     // Cold boot / reset: initialize from current build epoch
     rtc_epoch = BUILD_EPOCH;
@@ -209,17 +211,15 @@ void setup() {
 
   // Set system timeval with Bangkok UTC+7 offset
   time_t local_epoch = rtc_epoch + (7 * 3600);
-  struct timeval tv = { .tv_sec = local_epoch, .tv_usec = 0 };
-  settimeofday(&tv, NULL);
-
   struct tm* timeinfo = localtime(&local_epoch);
 
   int curHour   = timeinfo->tm_hour;
   int curMin    = timeinfo->tm_min;
   int curDay    = timeinfo->tm_mday;
   int curMonth  = timeinfo->tm_mon;
+  int curSec    = timeinfo->tm_sec;
 
-  Serial.printf("[E1001] Rendering real-time clock: %02d:%02d on %02d/%02d\n", curHour, curMin, curDay, curMonth + 1);
+  Serial.printf("[E1001] Rendering time: %02d:%02d:%02d on %02d/%02d\n", curHour, curMin, curSec, curDay, curMonth + 1);
 
   // 5. Full buffer render and refresh
   display.setFullWindow();
@@ -231,10 +231,23 @@ void setup() {
   display.powerOff();
   Serial.println("[E1001] Display refresh completed.");
 
-  // 6. Deep sleep timer setup (60 seconds)
-  esp_sleep_enable_timer_wakeup(UPDATE_INTERVAL_US);
-  Serial.println("[E1001] Entering deep sleep for 60s...");
+  // 6. Calculate precise seconds remaining to hit the exact top of the next minute (:00)
+  uint32_t render_elapsed_sec = (millis() - start_ms + 500) / 1000;
+  time_t finish_epoch = local_epoch + render_elapsed_sec;
+  struct tm* finish_time = localtime(&finish_epoch);
+
+  int sec_in_min = finish_time->tm_sec;
+  int sleep_seconds = 60 - sec_in_min;
+  if (sleep_seconds <= 2) {
+    sleep_seconds += 60;
+  }
+
+  last_sleep_sec = sleep_seconds + render_elapsed_sec;
+
+  Serial.printf("[E1001] Render took %ds. Next top-of-minute in %ds (target :00s)\n", render_elapsed_sec, sleep_seconds);
   Serial.flush();
+
+  esp_sleep_enable_timer_wakeup((uint64_t)sleep_seconds * 1000000ULL);
   esp_deep_sleep_start();
 }
 
