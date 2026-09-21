@@ -1,19 +1,23 @@
 /**
  * ============================================================================
- * Seeed reTerminal E1001 E-Paper Clock - GxEPD2 Native Driver Firmware
- * Version: 2026.09.21.18.15.00
- * Description: Native e-paper driver firmware for Seeed Studio reTerminal E1001.
- *              Uses Seeed_GxEPD2 with UC8179/GDEY075T7 controller to render
- *              a centered analog clock updating every 60 seconds.
+ * Seeed reTerminal E1001 E-Paper Clock - GxEPD2 with Wi-Fi NTP & PCF8563 RTC
+ * Version: 2026.09.21.18.43.00
+ * Description: Native firmware for Seeed Studio reTerminal E1001. Synchronizes
+ *              exact time down to the second via Wi-Fi NTP (from .env) into the
+ *              onboard PCF8563 RTC, then powers off Wi-Fi and updates the 
+ *              analog clock precisely at the top of every minute (:00s).
  * ============================================================================
  */
 
 #include <Arduino.h>
 #include <SPI.h>
+#include <Wire.h>
+#include <WiFi.h>
 #include <GxEPD2_BW.h>
 #include <Adafruit_GFX.h>
 #include <time.h>
 #include <sys/time.h>
+#include "esp_wifi.h"
 
 // ============================================================================
 // CONFIGURATION PARAMETERS (NO MAGIC NUMBERS)
@@ -28,8 +32,11 @@ const int PIN_EPD_CS    = 10; // Default: 10 (E-Paper Chip Select)
 const int PIN_EPD_DC    = 11; // Default: 11 (E-Paper Data/Command)
 const int PIN_EPD_RST   = 12; // Default: 12 (E-Paper Reset)
 const int PIN_EPD_BUSY  = 13; // Default: 13 (E-Paper Busy)
-const int PIN_SD_CS     = 14; // Default: 14 (MicroSD Chip Select - must be HIGH to release SPI bus)
+const int PIN_SD_CS     = 14; // Default: 14 (MicroSD Chip Select - released HIGH)
 const int PIN_SD_EN     = 16; // Default: 16 (MicroSD Power Enable)
+const int PIN_I2C_SDA   = 19; // Default: 19 (PCF8563 RTC I2C SDA)
+const int PIN_I2C_SCL   = 20; // Default: 20 (PCF8563 RTC I2C SCL)
+const uint8_t PCF8563_ADDR = 0x51; // Default: 0x51 (PCF8563 I2C address)
 
 // Display Canvas Geometry
 const int SCREEN_WIDTH      = 800; // Default: 800 (E1001 width)
@@ -51,9 +58,24 @@ const int HOUR_TICK_LEN     = 16;  // Default: 16 (Length of hour tick)
 const int MINUTE_TICK_LEN   = 7;   // Default: 7 (Length of minute tick)
 const int NUMERAL_INSET     = 34;  // Default: 34 (Numeral distance from rim)
 
-// Timing & Sleep
-const uint64_t UPDATE_INTERVAL_US = 60ULL * 1000000ULL; // Default: 60s in microseconds
-const uint32_t GLOBAL_SEED        = 42;                 // Default: 42 (Global PRNG seed)
+// Timing & Wi-Fi Defaults (Injected from .env if present)
+#ifndef WIFI_SSID
+#define WIFI_SSID "YOUR_WIFI_SSID"
+#endif
+
+#ifndef WIFI_PASSWORD
+#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#endif
+
+#ifndef NTP_SERVER
+#define NTP_SERVER "pool.ntp.org"
+#endif
+
+#ifndef TIMEZONE_OFFSET_HOURS
+#define TIMEZONE_OFFSET_HOURS 7
+#endif
+
+const uint32_t WIFI_TIMEOUT_MS = 12000; // Default: 12000ms Wi-Fi connection timeout
 
 // ============================================================================
 // 5 ADOBE KULER INSPIRED PALETTES (E-Paper 2-color / Monochrome Mapping)
@@ -83,6 +105,109 @@ int activePaletteIndex = 0; // Default: 0 (Classic E-Ink Slate & Paper)
 GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT> display(
   GxEPD2_750_T7(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY)
 );
+
+// Persist timestamp and sleep metrics across ESP32 deep sleep cycles
+RTC_DATA_ATTR static time_t rtc_epoch = 0;
+RTC_DATA_ATTR static uint32_t last_sleep_sec = 0;
+RTC_DATA_ATTR static bool ntp_synced = false;
+
+// ============================================================================
+// PCF8563 I2C RTC HELPER FUNCTIONS
+// ============================================================================
+static uint8_t decToBcd(uint8_t val) { return ((val / 10 * 16) + (val % 10)); }
+static uint8_t bcdToDec(uint8_t val) { return ((val / 16 * 10) + (val % 16)); }
+
+void setHardwareRTC(struct tm* t) {
+  Wire.beginTransmission(PCF8563_ADDR);
+  Wire.write(0x02); // Start at seconds register
+  Wire.write(decToBcd(t->tm_sec) & 0x7F);
+  Wire.write(decToBcd(t->tm_min) & 0x7F);
+  Wire.write(decToBcd(t->tm_hour) & 0x3F);
+  Wire.write(decToBcd(t->tm_mday) & 0x3F);
+  Wire.write(decToBcd(t->tm_wday) & 0x07);
+  Wire.write(decToBcd(t->tm_mon + 1) & 0x1F);
+  Wire.write(decToBcd(t->tm_year % 100));
+  Wire.endTransmission();
+  Serial.println("[RTC] PCF8563 hardware RTC synchronized.");
+}
+
+bool readHardwareRTC(struct tm* t) {
+  Wire.beginTransmission(PCF8563_ADDR);
+  Wire.write(0x02);
+  if (Wire.endTransmission() != 0) return false;
+
+  Wire.requestFrom((uint8_t)PCF8563_ADDR, (uint8_t)7);
+  if (Wire.available() < 7) return false;
+
+  t->tm_sec  = bcdToDec(Wire.read() & 0x7F);
+  t->tm_min  = bcdToDec(Wire.read() & 0x7F);
+  t->tm_hour = bcdToDec(Wire.read() & 0x3F);
+  t->tm_mday = bcdToDec(Wire.read() & 0x3F);
+  t->tm_wday = bcdToDec(Wire.read() & 0x07);
+  t->tm_mon  = bcdToDec(Wire.read() & 0x1F) - 1;
+  t->tm_year = bcdToDec(Wire.read()) + 100; // 2000s
+  return (t->tm_year >= 120); // Valid if year >= 2020
+}
+
+// ============================================================================
+// WI-FI NTP SYNCHRONIZATION
+// ============================================================================
+bool syncWithNTP() {
+  String ssid = String(WIFI_SSID);
+  if (ssid.length() == 0 || ssid == "YOUR_WIFI_SSID") {
+    Serial.println("[NTP] Wi-Fi SSID not configured in .env. Skipping NTP.");
+    return false;
+  }
+
+  Serial.printf("[NTP] Connecting to Wi-Fi: %s ...\n", ssid.c_str());
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  uint32_t start_connect = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - start_connect < WIFI_TIMEOUT_MS)) {
+    delay(200);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[NTP] Wi-Fi connection timed out. Skipping NTP.");
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    esp_wifi_stop();
+    return false;
+  }
+
+  Serial.println("[NTP] Wi-Fi connected. Fetching atomic time from NTP server...");
+  configTime(TIMEZONE_OFFSET_HOURS * 3600, 0, NTP_SERVER);
+
+  struct tm timeinfo;
+  bool got_ntp = false;
+  for (int i = 0; i < 25; i++) {
+    if (getLocalTime(&timeinfo, 200)) {
+      got_ntp = true;
+      break;
+    }
+    delay(200);
+  }
+
+  if (got_ntp) {
+    time_t now_epoch = mktime(&timeinfo);
+    rtc_epoch = now_epoch - (TIMEZONE_OFFSET_HOURS * 3600);
+    setHardwareRTC(&timeinfo);
+    Serial.printf("[NTP] Synchronized down to the second: %02d:%02d:%02d on %04d-%02d-%02d\n",
+                  timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+                  timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+    ntp_synced = true;
+  }
+
+  // Turn off Wi-Fi immediately to conserve battery
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  esp_wifi_stop();
+  Serial.println("[NTP] Wi-Fi powered down.");
+  return got_ntp;
+}
 
 /**
  * Draws the analog clock face into GxEPD2 buffer
@@ -169,59 +294,62 @@ void drawClockPage(int hour, int minute, int day, int month) {
   display.print("BATTERY: 100%");
 }
 
-#ifndef BUILD_EPOCH
-#define BUILD_EPOCH 1789990300L
-#endif
-
-// Persist timestamp across ESP32 deep sleep cycles
-RTC_DATA_ATTR static time_t rtc_epoch = 0;
-RTC_DATA_ATTR static uint32_t last_sleep_sec = 0;
-
 void setup() {
   uint32_t start_ms = millis();
   Serial.begin(115200);
-  delay(200);
+  delay(150);
   Serial.println("=========================================");
-  Serial.println("Seeed reTerminal E1001 Minute-Sync Clock");
-  Serial.println("Version: 2026.09.21.18.31.00");
+  Serial.println("Seeed reTerminal E1001 NTP-Sync Clock");
+  Serial.println("Version: 2026.09.21.18.43.00");
   Serial.println("=========================================");
 
-  // 1. Release SD Card from SPI bus so it does not interfere with E-Paper
+  // 1. Initialize I2C for PCF8563 RTC
+  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+
+  // 2. Release SD Card from SPI bus so it does not interfere with E-Paper
   pinMode(PIN_SD_CS, OUTPUT);
   digitalWrite(PIN_SD_CS, HIGH);
   pinMode(PIN_SD_EN, OUTPUT);
   digitalWrite(PIN_SD_EN, LOW);
 
-  // 2. Initialize Custom SPI for Seeed E1001 pins
+  // 3. Initialize Custom SPI for Seeed E1001 pins
   SPI.begin(PIN_SPI_SCK, PIN_SPI_MISO, PIN_SPI_MOSI, PIN_EPD_CS);
 
-  // 3. Initialize GxEPD2 display
+  // 4. Initialize GxEPD2 display
   display.init(115200, true, 50, false);
   display.setRotation(0);
 
-  // 4. Real RTC Timekeeping across deep sleep
+  // 5. Check if NTP sync needed (on cold boot or uninitialized RTC)
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-  if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER && rtc_epoch > 0) {
-    // Advance timestamp by the actual sleep + processing duration
-    rtc_epoch += (last_sleep_sec > 0 ? last_sleep_sec : 60);
-  } else {
-    // Cold boot / reset: initialize from current build epoch
-    rtc_epoch = BUILD_EPOCH;
+  if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER || !ntp_synced) {
+    syncWithNTP();
   }
 
-  // Set system timeval with Bangkok UTC+7 offset
-  time_t local_epoch = rtc_epoch + (7 * 3600);
-  struct tm* timeinfo = localtime(&local_epoch);
+  // 6. Read from PCF8563 RTC or advance persistent rtc_epoch
+  struct tm timeinfo;
+  bool rtc_valid = readHardwareRTC(&timeinfo);
 
-  int curHour   = timeinfo->tm_hour;
-  int curMin    = timeinfo->tm_min;
-  int curDay    = timeinfo->tm_mday;
-  int curMonth  = timeinfo->tm_mon;
-  int curSec    = timeinfo->tm_sec;
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER && rtc_epoch > 0) {
+    rtc_epoch += (last_sleep_sec > 0 ? last_sleep_sec : 60);
+  } else if (rtc_valid) {
+    rtc_epoch = mktime(&timeinfo) - (TIMEZONE_OFFSET_HOURS * 3600);
+  } else if (rtc_epoch == 0) {
+    rtc_epoch = 1789990800L; // Fallback build epoch
+  }
 
-  Serial.printf("[E1001] Rendering time: %02d:%02d:%02d on %02d/%02d\n", curHour, curMin, curSec, curDay, curMonth + 1);
+  time_t local_epoch = rtc_epoch + (TIMEZONE_OFFSET_HOURS * 3600);
+  struct tm* cur_time = localtime(&local_epoch);
 
-  // 5. Full buffer render and refresh
+  int curHour   = cur_time->tm_hour;
+  int curMin    = cur_time->tm_min;
+  int curDay    = cur_time->tm_mday;
+  int curMonth  = cur_time->tm_mon;
+  int curSec    = cur_time->tm_sec;
+
+  Serial.printf("[E1001] Rendering: %02d:%02d:%02d on %02d/%02d\n",
+                curHour, curMin, curSec, curDay, curMonth + 1);
+
+  // 7. Full buffer render and refresh
   display.setFullWindow();
   display.firstPage();
   do {
@@ -231,7 +359,7 @@ void setup() {
   display.powerOff();
   Serial.println("[E1001] Display refresh completed.");
 
-  // 6. Calculate precise seconds remaining to hit the exact top of the next minute (:00)
+  // 8. Calculate precise seconds remaining to hit the top of next minute (:00s)
   uint32_t render_elapsed_sec = (millis() - start_ms + 500) / 1000;
   time_t finish_epoch = local_epoch + render_elapsed_sec;
   struct tm* finish_time = localtime(&finish_epoch);
@@ -244,7 +372,8 @@ void setup() {
 
   last_sleep_sec = sleep_seconds + render_elapsed_sec;
 
-  Serial.printf("[E1001] Render took %ds. Next top-of-minute in %ds (target :00s)\n", render_elapsed_sec, sleep_seconds);
+  Serial.printf("[E1001] Render took %ds. Next top-of-minute in %ds (target :00s)\n",
+                render_elapsed_sec, sleep_seconds);
   Serial.flush();
 
   esp_sleep_enable_timer_wakeup((uint64_t)sleep_seconds * 1000000ULL);
