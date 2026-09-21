@@ -1,0 +1,85 @@
+# ============================================================================
+# Seeed reTerminal E1001 Analog Clock - ESPHome Configuration
+# Version: 2026.09.21.17.39.00
+# Description: ESPHome configuration for Seeed Studio reTerminal E1001 (ESP32-S3)
+# ============================================================================
+
+substitutions:
+  name: "seeed-reterminal-e1001"
+  friendly_name: "Seeed E1001 Analog Clock"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+# Enable logging over USB-UART (/dev/cu.usbserial-110)
+logger:
+  hardware_uart: UART0
+  baud_rate: 115200
+
+# Wi-Fi configuration (Optional / Local AP fallback)
+wifi:
+  ssid: "!secret wifi_ssid"
+  password: "!secret wifi_password"
+  ap:
+    ssid: "E1001-Clock-Fallback"
+
+captive_portal:
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: "UTC"
+    on_time:
+      - seconds: 0
+        minutes: /1
+        then:
+          - component.update: eink_display
+
+spi:
+  clk_pin: GPIO7
+  mosi_pin: GPIO9
+
+display:
+  - platform: waveshare_epaper
+    id: eink_display
+    cs_pin: GPIO10
+    dc_pin: GPIO11
+    reset_pin: GPIO12
+    busy_pin: GPIO13
+    model: 7.50inv2
+    update_interval: 60s
+    rotation: 0
+    lambda: |-
+      auto time = id(sntp_time).now();
+      if (!time.is_valid()) return;
+
+      int cx = 400;
+      int cy = 240;
+      int r = 190;
+
+      // Draw Outer Dial Circle
+      it.circle(cx, cy, r);
+      it.circle(cx, cy, r - 10);
+
+      // Calculate Hand Angles
+      float hour_angle = ((time.hour % 12) + time.minute / 60.0f) * (M_PI / 6.0f);
+      float min_angle = time.minute * (M_PI / 30.0f);
+
+      // Draw Hour Hand
+      int hx = cx + (int)(sin(hour_angle) * 105);
+      int hy = cy - (int)(cos(hour_angle) * 105);
+      it.line(cx, cy, hx, hy);
+
+      // Draw Minute Hand
+      int mx = cx + (int)(sin(min_angle) * 155);
+      int my = cy - (int)(cos(min_angle) * 155);
+      it.line(cx, cy, mx, my);
+
+      // Center Pin
+      it.filled_circle(cx, cy, 6);
