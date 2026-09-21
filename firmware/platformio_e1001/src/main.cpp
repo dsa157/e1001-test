@@ -163,23 +163,25 @@ void drawClockPage(int hour, int minute, int day, int month) {
   display.fillCircle(CENTER_X, CENTER_Y, CENTER_PIN_RADIUS, pal.fgColor);
   display.fillCircle(CENTER_X, CENTER_Y, 2, pal.bgColor);
 
-  // 10. Draw Telemetry Accents
+  // 10. Draw Telemetry Accents (Keep Battery Level only)
   display.setTextSize(1);
-  display.setCursor(30, 25);
-  display.print("SEEED reTerminal E1001 (800x480)");
-  display.setCursor(30, 40);
-  display.print("REFRESH: 1 MIN  •  BATTERY: 100%");
-
-  display.setCursor(SCREEN_WIDTH - 220, 25);
-  display.print("Mascot: ChronoOwl (Inky)");
+  display.setCursor(SCREEN_WIDTH - 120, 25);
+  display.print("BATTERY: 100%");
 }
+
+#ifndef BUILD_EPOCH
+#define BUILD_EPOCH 1789989600L // Fallback timestamp: Sep 21 2026
+#endif
+
+// Persist timestamp across ESP32 deep sleep cycles
+RTC_DATA_ATTR static time_t rtc_epoch = 0;
 
 void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println("=========================================");
   Serial.println("Seeed reTerminal E1001 GxEPD2 Clock Init");
-  Serial.println("Version: 2026.09.21.18.15.00");
+  Serial.println("Version: 2026.09.21.18.20.00");
   Serial.println("=========================================");
 
   // 1. Release SD Card from SPI bus so it does not interfere with E-Paper
@@ -191,20 +193,33 @@ void setup() {
   // 2. Initialize Custom SPI for Seeed E1001 pins
   SPI.begin(PIN_SPI_SCK, PIN_SPI_MISO, PIN_SPI_MOSI, PIN_EPD_CS);
 
-  // 3. Initialize GxEPD2 display (115200 serial diagnostic, reset duration, initial full refresh)
+  // 3. Initialize GxEPD2 display
   display.init(115200, true, 50, false);
   display.setRotation(0);
 
-  // 4. Retrieve system / RTC time
-  time_t now = time(nullptr);
-  struct tm* timeinfo = localtime(&now);
+  // 4. Real RTC Timekeeping across deep sleep
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER && rtc_epoch > 0) {
+    // Advance timestamp by the sleep duration (60 seconds)
+    rtc_epoch += 60;
+  } else {
+    // Cold boot / reset: initialize from current build epoch
+    rtc_epoch = BUILD_EPOCH;
+  }
 
-  int curHour   = (timeinfo->tm_hour == 0 && timeinfo->tm_min == 0) ? 10 : timeinfo->tm_hour;
-  int curMin    = (timeinfo->tm_hour == 0 && timeinfo->tm_min == 0) ? 10 : timeinfo->tm_min;
-  int curDay    = (timeinfo->tm_mday == 0) ? 21 : timeinfo->tm_mday;
+  // Set system timeval with Bangkok UTC+7 offset
+  time_t local_epoch = rtc_epoch + (7 * 3600);
+  struct timeval tv = { .tv_sec = local_epoch, .tv_usec = 0 };
+  settimeofday(&tv, NULL);
+
+  struct tm* timeinfo = localtime(&local_epoch);
+
+  int curHour   = timeinfo->tm_hour;
+  int curMin    = timeinfo->tm_min;
+  int curDay    = timeinfo->tm_mday;
   int curMonth  = timeinfo->tm_mon;
 
-  Serial.printf("[E1001] Rendering clock for %02d:%02d\n", curHour, curMin);
+  Serial.printf("[E1001] Rendering real-time clock: %02d:%02d on %02d/%02d\n", curHour, curMin, curDay, curMonth + 1);
 
   // 5. Full buffer render and refresh
   display.setFullWindow();

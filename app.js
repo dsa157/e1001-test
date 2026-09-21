@@ -331,26 +331,10 @@ function drawTelemetryAccents(palette, now) {
   ctx.save();
   ctx.font = `500 12px ${TEXT_FONT_FAMILY}`;
   ctx.fillStyle = palette.secondaryText;
-
-  // Left Telemetry: Seeed reTerminal E1001 Model ID & Resolution
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.fillText("SEEED reTerminal E1001", 34, 30);
-  ctx.fillText("800 × 480  •  7.5″ E-INK", 34, 48);
-
-  // Right Telemetry: Timezone & Minute Sync Indicator
-  const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || "LOCAL";
+  // Right Telemetry: Battery Level
   ctx.textAlign = "right";
-  ctx.fillText(`TZ: ${tzName}`, CANVAS_WIDTH - 34, 30);
-  
-  // Power & Refresh Status
-  ctx.fillText("REFRESH: 1 MIN  •  100% PWR", CANVAS_WIDTH - 34, 48);
-
-  // Subtle bottom status bar
-  ctx.textAlign = "center";
-  ctx.textBaseline = "bottom";
-  ctx.font = `400 11px ${TEXT_FONT_FAMILY}`;
-  ctx.fillText("Continuous Low-Power Clock  •  Mascot: ChronoOwl", CENTER_X, CANVAS_HEIGHT - 20);
+  ctx.textBaseline = "top";
+  ctx.fillText("BATTERY: 100%", CANVAS_WIDTH - 34, 30);
   ctx.restore();
 }
 
