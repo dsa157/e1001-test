@@ -331,6 +331,12 @@ function drawTelemetryAccents(palette, now) {
   ctx.save();
   ctx.font = `500 12px ${TEXT_FONT_FAMILY}`;
   ctx.fillStyle = palette.secondaryText;
+
+  // Left Telemetry: Wi-Fi Status
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText("Connected to: ROOM 601", 34, 30);
+
   // Right Telemetry: Battery Level
   ctx.textAlign = "right";
   ctx.textBaseline = "top";

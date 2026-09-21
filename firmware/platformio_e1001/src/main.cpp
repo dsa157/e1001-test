@@ -106,10 +106,11 @@ GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT> display(
   GxEPD2_750_T7(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY)
 );
 
-// Persist timestamp and sleep metrics across ESP32 deep sleep cycles
+// Persist timestamp, sleep metrics, and Wi-Fi status across ESP32 deep sleep cycles
 RTC_DATA_ATTR static time_t rtc_epoch = 0;
 RTC_DATA_ATTR static uint32_t last_sleep_sec = 0;
 RTC_DATA_ATTR static bool ntp_synced = false;
+RTC_DATA_ATTR static char wifi_status_str[64] = "Wi-Fi: Initializing...";
 
 // ============================================================================
 // PCF8563 I2C RTC HELPER FUNCTIONS
@@ -155,50 +156,56 @@ bool readHardwareRTC(struct tm* t) {
 bool syncWithNTP() {
   String ssid = String(WIFI_SSID);
   if (ssid.length() == 0 || ssid == "YOUR_WIFI_SSID") {
+    snprintf(wifi_status_str, sizeof(wifi_status_str), "Could not connect to: (No SSID)");
     Serial.println("[NTP] Wi-Fi SSID not configured in .env. Skipping NTP.");
     return false;
   }
 
   Serial.printf("[NTP] Connecting to Wi-Fi: %s ...\n", ssid.c_str());
+  WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   uint32_t start_connect = millis();
   while (WiFi.status() != WL_CONNECTED && (millis() - start_connect < WIFI_TIMEOUT_MS)) {
-    delay(200);
+    delay(250);
     Serial.print(".");
   }
   Serial.println();
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[NTP] Wi-Fi connection timed out. Skipping NTP.");
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
-    esp_wifi_stop();
-    return false;
-  }
+  if (WiFi.status() == WL_CONNECTED) {
+    snprintf(wifi_status_str, sizeof(wifi_status_str), "Connected to: %s", ssid.c_str());
+    Serial.printf("[NTP] Connected to %s with IP %s\n", ssid.c_str(), WiFi.localIP().toString().c_str());
 
-  Serial.println("[NTP] Wi-Fi connected. Fetching atomic time from NTP server...");
-  configTime(TIMEZONE_OFFSET_HOURS * 3600, 0, NTP_SERVER);
+    // Configure NTP with multiple fallback servers
+    configTime(TIMEZONE_OFFSET_HOURS * 3600, 0, NTP_SERVER, "time.google.com", "pool.ntp.org");
 
-  struct tm timeinfo;
-  bool got_ntp = false;
-  for (int i = 0; i < 25; i++) {
-    if (getLocalTime(&timeinfo, 200)) {
-      got_ntp = true;
-      break;
+    struct tm timeinfo;
+    bool got_ntp = false;
+    for (int i = 0; i < 30; i++) {
+      if (getLocalTime(&timeinfo, 300)) {
+        got_ntp = true;
+        break;
+      }
+      delay(200);
     }
-    delay(200);
-  }
 
-  if (got_ntp) {
-    time_t now_epoch = mktime(&timeinfo);
-    rtc_epoch = now_epoch - (TIMEZONE_OFFSET_HOURS * 3600);
-    setHardwareRTC(&timeinfo);
-    Serial.printf("[NTP] Synchronized down to the second: %02d:%02d:%02d on %04d-%02d-%02d\n",
-                  timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-                  timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
-    ntp_synced = true;
+    if (got_ntp) {
+      time_t now_epoch = mktime(&timeinfo);
+      rtc_epoch = now_epoch - (TIMEZONE_OFFSET_HOURS * 3600);
+      setHardwareRTC(&timeinfo);
+      Serial.printf("[NTP] Synchronized down to the second: %02d:%02d:%02d on %04d-%02d-%02d\n",
+                    timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+                    timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+      ntp_synced = true;
+    } else {
+      Serial.println("[NTP] NTP sync response timed out.");
+    }
+  } else {
+    snprintf(wifi_status_str, sizeof(wifi_status_str), "Could not connect to: %s", ssid.c_str());
+    Serial.printf("[NTP] Could not connect to: %s\n", ssid.c_str());
   }
 
   // Turn off Wi-Fi immediately to conserve battery
@@ -206,7 +213,7 @@ bool syncWithNTP() {
   WiFi.mode(WIFI_OFF);
   esp_wifi_stop();
   Serial.println("[NTP] Wi-Fi powered down.");
-  return got_ntp;
+  return ntp_synced;
 }
 
 /**
@@ -288,8 +295,11 @@ void drawClockPage(int hour, int minute, int day, int month) {
   display.fillCircle(CENTER_X, CENTER_Y, CENTER_PIN_RADIUS, pal.fgColor);
   display.fillCircle(CENTER_X, CENTER_Y, 2, pal.bgColor);
 
-  // 10. Draw Telemetry Accents (Keep Battery Level only)
+  // 10. Draw Telemetry Accents (Wi-Fi Status on Left, Battery on Right)
   display.setTextSize(1);
+  display.setCursor(30, 25);
+  display.print(wifi_status_str);
+
   display.setCursor(SCREEN_WIDTH - 120, 25);
   display.print("BATTERY: 100%");
 }
