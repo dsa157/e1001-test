@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  ============================================================================
+  Seeed reTerminal E1001 E-Paper Clock Screen
+  Version: 2026.09.21.17.36.00
+  Description: Web application and screen renderer for the Seeed Studio 
+               reTerminal E1001 7.5" e-paper display (800x480 resolution).
+  ============================================================================
+-->
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seeed E1001 E-Paper Analog Clock</title>
+  <meta name="description" content="Ultra-clean analog clock screen renderer for Seeed reTerminal E1001 e-paper frame, updating precisely every minute.">
+  
+  <!-- Favicon References (Rule 22) -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="header-nav">
+    <div class="brand-section">
+      <!-- Mascot: ChronoOwl (Inky) (Rule 21) -->
+      <div class="brand-mascot" title="ChronoOwl - The E-Paper Timekeeper Mascot">🦉</div>
+      <div>
+        <span class="brand-title">ChronoFrame</span>
+        <span class="brand-badge">E1001 800×480</span>
+      </div>
+    </div>
+
+    <div class="user-profile-widget">
+      <button class="help-btn" onclick="openOnboarding()" title="Open Guide">Guide & Help</button>
+      <!-- Gravatar Profile Icon with fallback to generic avatar (Rule 27) -->
+      <img class="profile-avatar" 
+           src="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y" 
+           alt="User Profile" 
+           title="User Profile (Gravatar / Default)" />
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="main-content">
+    <section class="hero-info">
+      <h1>Seeed E1001 Analog Clock</h1>
+      <p>Precision timekeeping tuned for 7.5″ e-ink displays. Auto-refreshes on every minute boundary.</p>
+    </section>
+
+    <!-- Physical Hardware Frame Simulation (800x480 Resolution) -->
+    <div class="eink-frame-container">
+      <span class="eink-hardware-label">Seeed Studio reTerminal E1001</span>
+      <div class="eink-hardware-badge">
+        <span class="status-dot"></span>
+        <span>ONLINE • <span id="liveTimeText">--:--</span></span>
+      </div>
+
+      <div class="canvas-viewport">
+        <!-- Exact 800x480 Canvas (Rule 9: Centered) -->
+        <canvas id="clockCanvas" width="800" height="480"></canvas>
+      </div>
+    </div>
+
+    <!-- Interactive Control Toolbar -->
+    <div class="control-toolbar">
+      <div class="control-group">
+        <label for="paletteSelect" class="control-label">Color Palette:</label>
+        <select id="paletteSelect" class="palette-dropdown">
+          <option value="0">0: Classic E-Ink Slate & Paper</option>
+          <option value="1">1: Bauhaus Modernist</option>
+          <option value="2">2: Nord Timeless</option>
+          <option value="3">3: Vintage Watchmaker</option>
+          <option value="4">4: Sandstorm Minimalist</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <button id="refreshBtn" class="btn-secondary" title="Force Screen Render">Sync Now</button>
+        <button id="exportBtn" class="btn-primary" title="Export exact 800x480 PNG for e-paper device">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Export 800×480 Image
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Onboarding Walkthrough Modal (Rule 25) -->
+  <div id="onboardingModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="brand-mascot">🦉</div>
+        <div>
+          <h3>Welcome to ChronoFrame</h3>
+          <p style="font-size: 0.82rem; color: var(--text-muted);">Meet ChronoOwl, your Seeed E1001 e-paper assistant</p>
+        </div>
+      </div>
+
+      <div class="walkthrough-steps">
+        <div class="walkthrough-item">
+          <span class="walkthrough-number">1</span>
+          <p><strong>Native 800×480 Ratio:</strong> Designed specifically for the Seeed Studio reTerminal E1001 7.5″ e-ink screen.</p>
+        </div>
+        <div class="walkthrough-item">
+          <span class="walkthrough-number">2</span>
+          <p><strong>Minute Boundary Timing:</strong> Automatically syncs with the exact change of the minute (00s) to conserve refresh cycles.</p>
+        </div>
+        <div class="walkthrough-item">
+          <span class="walkthrough-number">3</span>
+          <p><strong>Adobe Kuler Palettes:</strong> Switch between 5 high-contrast palettes for grayscale e-ink or rich previews.</p>
+        </div>
+        <div class="walkthrough-item">
+          <span class="walkthrough-number">4</span>
+          <p><strong>Export Ready:</strong> Generate pixel-perfect 800×480 images ready to be pushed over USB or fetched via TRMNL/ESPHome.</p>
+        </div>
+      </div>
+
+      <button class="btn-primary" style="justify-content: center; width: 100%; margin-top: 8px;" onclick="dismissOnboarding()">
+        Got it, Let's Go!
+      </button>
+    </div>
+  </div>
+
+  <!-- Governance Footer (Rule 23) -->
+  <footer class="site-footer">
+    <div class="footer-links">
+      <a href="#privacy">Privacy Policy</a>
+      <a href="#terms">Terms of Service</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#support">Support</a>
+      <a href="https://github.com/seeed-studio" target="_blank" rel="noopener">Seeed Studio Docs</a>
+    </div>
+    <div class="copyright-text">
+      &copy; 2026 ChronoFrame & Seeed E1001 Project. All rights reserved.
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,453 @@
+/**
+ * ============================================================================
+ * Seeed reTerminal E1001 Analog Clock Dashboard - Stylesheet
+ * Version: 2026.09.21.17.36.00
+ * Description: Responsive, mobile-first aesthetic styling with realistic
+ *              beveled e-ink frame housing, glassmorphic controls, and modal.
+ * ============================================================================
+ */
+
+/* ============================================================================
+ * DESIGN TOKENS & PARAMETERS
+ * ============================================================================ */
+:root {
+  --bg-color: #0b0f17;
+  --surface-card: rgba(22, 27, 38, 0.85);
+  --surface-border: rgba(255, 255, 255, 0.08);
+  --primary-accent: #38bdf8;
+  --primary-accent-hover: #0284c7;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --eink-frame-bg: #1e2530;
+  --eink-frame-border: #334155;
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --shadow-ambient: 0 20px 40px -15px rgba(0, 0, 0, 0.6);
+  --shadow-eink: 0 15px 35px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.05);
+}
+
+/* Base resets & layout */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background: radial-gradient(circle at 50% 0%, #172033 0%, var(--bg-color) 75%);
+  color: var(--text-main);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-x: hidden;
+}
+
+/* ============================================================================
+ * HEADER & NAVIGATION
+ * ============================================================================ */
+.header-nav {
+  width: 100%;
+  max-width: 1100px;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--surface-border);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.brand-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mascot {
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border: 1.5px solid var(--primary-accent);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+}
+
+.brand-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+}
+
+.brand-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--primary-accent);
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-left: 6px;
+}
+
+.user-profile-widget {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-border);
+  object-fit: cover;
+  background-color: #334155;
+}
+
+.help-btn {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid var(--surface-border);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.help-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+
+/* ============================================================================
+ * MAIN CONTAINER & E-PAPER FRAME
+ * ============================================================================ */
+.main-content {
+  width: 100%;
+  max-width: 1100px;
+  padding: 32px 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.hero-info {
+  text-align: center;
+  max-width: 600px;
+}
+
+.hero-info h1 {
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 6px;
+}
+
+.hero-info p {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+/* Physical Seeed E1001 E-Paper Frame Simulation */
+.eink-frame-container {
+  background: var(--eink-frame-bg);
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--eink-frame-border);
+  box-shadow: var(--shadow-eink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  max-width: 100%;
+}
+
+.eink-hardware-label {
+  position: absolute;
+  top: 8px;
+  left: 24px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.eink-hardware-badge {
+  position: absolute;
+  top: 8px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  color: #10b981;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  background-color: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #10b981;
+  animation: pulse 2s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.canvas-viewport {
+  width: 100%;
+  max-width: 800px;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.25);
+  background: #f7f8f5;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#clockCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 800px;
+  aspect-ratio: 800 / 480;
+}
+
+/* ============================================================================
+ * CONTROL TOOLBAR
+ * ============================================================================ */
+.control-toolbar {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(12px);
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.control-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.palette-dropdown {
+  background: #0f172a;
+  color: var(--text-main);
+  border: 1px solid var(--surface-border);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.palette-dropdown:focus {
+  border-color: var(--primary-accent);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary-accent), var(--primary-accent-hover));
+  color: #041224;
+  font-weight: 700;
+  font-size: 0.88rem;
+  border: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  border: 1px solid var(--surface-border);
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ============================================================================
+ * ONBOARDING MODAL
+ * ============================================================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 7, 13, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal-card {
+  background: #151b26;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  max-width: 520px;
+  width: 100%;
+  padding: 28px;
+  box-shadow: var(--shadow-ambient);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.modal-header h3 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.walkthrough-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.walkthrough-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.walkthrough-number {
+  background: var(--primary-accent);
+  color: #041224;
+  font-weight: 800;
+  font-size: 0.8rem;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.walkthrough-item p {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.walkthrough-item strong {
+  color: var(--text-main);
+}
+
+/* ============================================================================
+ * GOVERNANCE FOOTER (Rule 23)
+ * ============================================================================ */
+.site-footer {
+  width: 100%;
+  border-top: 1px solid var(--surface-border);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: #070a10;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: auto;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+}
+
+.footer-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer-links a:hover {
+  color: var(--primary-accent);
+}
+
+.copyright-text {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+/* Mobile Responsive Adjustments */
+@media (max-width: 640px) {
+  .header-nav {
+    padding: 12px 16px;
+  }
+  .eink-frame-container {
+    padding: 14px;
+  }
+  .control-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .control-group {
+    justify-content: space-between;
+  }
+}
